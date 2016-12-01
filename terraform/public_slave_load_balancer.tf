@@ -1,5 +1,5 @@
 resource "aws_elb" "public_slaves" {
-  name = "dcos-public-slave-${var.elb_version}-load-balancer"
+  name = "dcos-public-slave-${var.elb_version}-lb"
 
   subnets = ["${var.public_subnet_ids}"] # Review support multiple AZ
 

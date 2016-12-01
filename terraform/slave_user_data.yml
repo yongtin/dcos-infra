@@ -1,12 +1,168 @@
 #cloud-config
 #
-# wget dcos_install <master|slave|public_slave>
-# execute dcos_install <master|slave|public_slave>
-# chef-like management. init.sh <master|slave|public_slave>
+# dcos-download.service - wget dcos_install ${dcos_bootstrap_url}
+# dcos-setup.service - dcos_install <TYPE>
+# dcos-config-init.service - init.sh <TYPE> ${dcos_configuration_init_url} chef-like management. FIXME: another idea is to use a privilege configuration container.
+#
 "coreos":
   "units":
+  - command: start
+    content: |
+      [Unit]
+      After=dcos.target docker.service
+      Description=Run dcos config init
+      [Service]
+      Type=oneshot
+      RemainAfterExit=yes
+      ExecStart=/bin/bash -c "curl -L --retry 3 ${dcos_configuration_init_url} | bash"
+    name: dcos-config-init.service
+
+  - name: docker.service
+    drop-ins:
+      - name: 50-insecure-registry.conf
+        content: |
+          [Service]
+          #Environment='DOCKER_OPTS=--insecure-registry="leader.mesos:5000"'
+          Environment='DOCKER_OPTS=--insecure-registry="10.0.0.0/16" --insecure-registry="leader.mesos:5000"'
+
+  - name: dcos-download.service
+    command: start
+    content: |
+      [Unit]
+      Description=Download and extract dcos bootstrap
+      After=network-online.target
+      Wants=network-online.target
+      ConditionPathExists=!/opt/mesosphere/
+      ConditionPathExists=!/opt/dcos_setup/
+      [Service]
+      Type=oneshot
+      StandardOutput=journal+console
+      StandardError=journal+console
+      RemainAfterExit=yes
+      ExecStartPre=/usr/bin/mkdir -p /opt/dcos_setup/
+      ExecStart=/usr/bin/curl --keepalive-time 2 -fLsSv --retry 20 -Y 100000 -y 60 -o /opt/dcos_setup/dcos_install.sh ${dcos_bootstrap_url}/dcos_install.sh
+
+  - name: dcos-public-slave-setup.service
+    command: start
+    content: |
+      [Unit]
+      Description=Download and extract dcos bootstrap
+      After=dcos-download.service
+      Wants=dcos-download.service
+      ConditionPathExists=!/opt/mesosphere/
+      ConditionPathExists=/opt/dcos_setup/dcos_install.sh
+      [Service]
+      Type=oneshot
+      StandardOutput=journal+console
+      StandardError=journal+console
+      RemainAfterExit=yes
+      ExecStart=/usr/bin/bash -c "/opt/dcos_setup/dcos_install.sh slave"
+
+  - "command": |-
+      start
+    "content": |
+      [Unit]
+      Description=AWS Setup: Formats the /var/lib ephemeral drive
+      Before=var-lib.mount dbus.service
+      [Service]
+      Type=oneshot
+      RemainAfterExit=yes
+      ExecStart=/bin/bash -c "(blkid -t TYPE=ext4 | grep xvdb) || (/usr/sbin/mkfs.ext4 -F /dev/xvdb)"
+    "name": |-
+      format-var-lib-ephemeral.service
+  - "command": |-
+      start
+    "content": |
+      [Unit]
+      Description=AWS Setup: Mount /var/lib
+      Before=dbus.service
+      [Mount]
+      What=/dev/xvdb
+      Where=/var/lib
+      Type=ext4
+    "name": |-
+      var-lib.mount
+  - "command": |-
+      stop
+    "mask": !!bool |-
+      true
+    "name": |-
+      etcd.service
+  - "command": |-
+      stop
+    "mask": !!bool |-
+      true
+    "name": |-
+      update-engine.service
+  - "command": |-
+      stop
+    "mask": !!bool |-
+      true
+    "name": |-
+      locksmithd.service
+  - "command": |-
+      stop
+    "name": |-
+      systemd-resolved.service
+  - "command": |-
+      restart
+    "name": |-
+      systemd-journald.service
+  - "command": |-
+      restart
+    "name": |-
+      docker.service
+  - "command": |-
+      start
+    "content": |
+      [Unit]
+      Before=dcos.target
+      [Service]
+      Type=oneshot
+      StandardOutput=journal+console
+      StandardError=journal+console
+      ExecStartPre=/usr/bin/mkdir -p /etc/profile.d
+      ExecStart=/usr/bin/ln -sf /opt/mesosphere/environment.export /etc/profile.d/dcos.sh
+    "name": |-
+      dcos-link-env.service
+
+  - "command": |-
+      start
+    "content": |-
+      [Unit]
+      Description=AWS Setup: Signal CloudFormation Success
+      ConditionPathExists=!/var/lib/dcos-cfn-signal
+      [Service]
+      Type=simple
+      Restart=on-failure
+      StartLimitInterval=0
+      RestartSec=15s
+      EnvironmentFile=/opt/mesosphere/environment
+      EnvironmentFile=/opt/mesosphere/etc/cfn_signal_metadata
+      Environment="AWS_CFN_SIGNAL_THIS_RESOURCE=SlaveServerGroup"
+      ExecStartPre=/bin/ping -c1 leader.mesos
+      ExecStartPre=/opt/mesosphere/bin/cfn-signal
+      ExecStart=/usr/bin/touch /var/lib/dcos-cfn-signal
+    "name": |-
+      dcos-cfn-signal.service
+    "no_block": !!bool |-
+      true
   "update":
     "reboot-strategy": |-
       off
 "write_files":
-
+- "content": |
+    rexray:
+      loglevel: info
+      modules:
+        default-admin:
+          host: tcp://127.0.0.1:61003
+      storageDrivers:
+      - ec2
+      volume:
+        unmount:
+          ignoreusedcount: true
+  "path": |-
+    /etc/rexray/config.yml
+  "permissions": |-
+    0644

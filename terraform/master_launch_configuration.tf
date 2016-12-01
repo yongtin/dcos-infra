@@ -11,26 +11,17 @@ resource "aws_launch_configuration" "master" {
   associate_public_ip_address = false
 
   lifecycle {
-    create_before_destroy = false # FIXME: is this correct? 
+    create_before_destroy = true
   }
 }
 
-# FIXME below
 data "template_file" "master_user_data" {
   template = "${file("${path.module}/master_user_data.yml")}"
 
-#  vars {
-#    authentication_enabled      = "${var.authentication_enabled}"
-#    bootstrap_id                = "${var.bootstrap_id}"
-#    stack_name                  = "${var.stack_name}"
-#    aws_region                  = "${var.aws_region}"
-#    cluster_packages            = "${var.cluster_packages}"
-#    aws_access_key_id           = "${aws_iam_access_key.host_keys.id}"
-#    aws_secret_access_key       = "${aws_iam_access_key.host_keys.secret}"
-#    fallback_dns                = "${var.fallback_dns}"
-#    internal_master_lb_dns_name = "${aws_elb.internal_master.dns_name}"
-#    public_lb_dns_name          = "${aws_elb.public_slaves.dns_name}"
-#    exhibitor_s3_bucket         = "${aws_s3_bucket.exhibitor.id}"
-#    dcos_base_download_url      = "${var.dcos_base_download_url}"
-#  }
+  vars {
+    dcos_bootstrap_url                   = "${var.dcos_bootstrap_url}"
+    dcos_configuration_init_url          = "${var.dcos_configuration_init_url}"
+    dcos_base_download_url               = "${var.dcos_base_download_url}"
+    dcos_master_registry_image           = "${var.dcos_master_registry_image}"
+  }
 }

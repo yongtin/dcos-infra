@@ -14,8 +14,4 @@ resource "aws_autoscaling_group" "public_slave_server_group" {
     value = "mesos-slave"
     propagate_at_launch = true
   }
-
-  lifecycle {
-    create_before_destroy = false 
-  }
 }

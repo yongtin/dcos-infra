@@ -1,5 +1,5 @@
 resource "aws_elb" "internal_master" {
-  name = "dcos-master-${var.elb_version}-load-balancer"
+  name = "dcos-master-${var.elb_version}-lb"
   
   internal = true
   subnets = ["${var.private_subnet_ids}"] 

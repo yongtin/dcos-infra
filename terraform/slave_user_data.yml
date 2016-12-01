@@ -1,0 +1,12 @@
+#cloud-config
+#
+# wget dcos_install <master|slave|public_slave>
+# execute dcos_install <master|slave|public_slave>
+# chef-like management. init.sh <master|slave|public_slave>
+"coreos":
+  "units":
+  "update":
+    "reboot-strategy": |-
+      off
+"write_files":
+
